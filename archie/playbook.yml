@@ -1,0 +1,64 @@
+---
+- name: Automate Ubuntu Desktop Setup
+  hosts: archie
+  tasks:
+    - name: Update apt cache
+      become: yes
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install essential packages
+      become: yes
+      ansible.builtin.apt:
+        name:
+          - git
+          - tmux
+          - zsh
+          - stow
+          - build-essential
+        state: present
+
+    - name: Install Google Chrome
+      become: yes
+      ansible.builtin.get_url:
+        url: https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+        dest: /tmp/google-chrome-stable_current_amd64.deb
+      # Install using a separate task for clarity
+    - name: Install Google Chrome from downloaded .deb file
+      become: yes
+      ansible.builtin.apt:
+        deb: /tmp/google-chrome-stable_current_amd64.deb
+
+    - name: Install VS Code
+      become: yes
+      ansible.builtin.shell: |
+        wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg
+        sudo install -o root -g root -m 644 packages.microsoft.gpg /etc/apt/trusted.gpg.d/
+        sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/vscode stable main" > /etc/apt/sources.list.d/vscode.list'
+        sudo apt update
+        sudo apt install code
+
+    - name: Clone dotfiles repository
+      ansible.builtin.git:
+        repo: 'git@github.com:jayjay-w/dotfiles.git'
+        dest: '{{ ansible_env.HOME }}/dotfiles'
+        clone: yes
+        update: yes
+
+    - name: Symlink dotfiles with Stow
+      ansible.builtin.command: stow {{ item }}
+      args:
+        chdir: '{{ ansible_env.HOME }}/dotfiles'
+      with_items:
+        - zsh
+        - tmux
+        - oh-my-zsh
+        - asdf
+        - git
+        - kitty
+
+    - name: Run Nerd Font installation script
+      become: yes
+      ansible.builtin.shell: '{{ ansible_env.HOME }}/dotfiles/ubuntu-nerd-font-install.sh'
+      args:
+        chdir: '{{ ansible_env.HOME }}/dotfiles'
