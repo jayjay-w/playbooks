@@ -1,0 +1,43 @@
+---
+- name: Automate Ubuntu Desktop Setup
+  hosts: archie
+  tasks:
+    - name: Update apt cache
+      become: yes
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install essential packages
+      become: yes
+      ansible.builtin.apt:
+        name:
+          - git
+          - tmux
+          - zsh
+          - stow
+        state: present
+
+    - name: Clone dotfiles repository
+      ansible.builtin.git:
+        repo: 'git@github.com:jayjay-w/dotfiles.git'
+        dest: '{{ ansible_env.HOME }}/dotfiles'
+        clone: yes
+        update: yes
+
+    - name: Symlink dotfiles with Stow
+      ansible.builtin.command: stow {{ item }}
+      args:
+        chdir: '{{ ansible_env.HOME }}/dotfiles'
+      with_items:
+        - zsh
+        - tmux
+        - oh-my-zsh
+        - asdf
+        - git
+        - kitty
+
+    - name: Run Nerd Font installation script
+      become: yes
+      ansible.builtin.shell: '{{ ansible_env.HOME }}/dotfiles/ubuntu-nerd-font-install.sh'
+      args:
+        chdir: '{{ ansible_env.HOME }}/dotfiles'
