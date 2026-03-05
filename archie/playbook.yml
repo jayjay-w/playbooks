@@ -17,6 +17,43 @@
           - htop
           - vlc
           - gparted
+          # Dev tools
+          - cmake
+          - pkg-config
+          - libssl-dev
+          - python3
+          - python3-pip
+          - python3-venv
+          - default-jdk
+          - jq
+          - httpie
+          - shellcheck
+          - strace
+          - net-tools
+          - openssh-server
+          - wget
+          - unzip
+          # Productivity & utilities
+          - flameshot
+          - peek
+          - copyq
+          - redshift
+          - keepassxc
+          - thunderbird
+          - libreoffice
+          - filezilla
+          - remmina
+          - timeshift
+          - tree
+          - ripgrep
+          - fd-find
+          - fzf
+          - bat
+          - ncdu
+          - tldr
+          - neovim
+          - dconf-editor
+          - gnome-tweaks
         state: present
 
     - name: Install Google Chrome
@@ -53,9 +90,14 @@
       args:
         creates: /usr/share/keyrings/docker-archive-keyring.gpg
 
+    - name: Get Ubuntu codename
+      ansible.builtin.shell: ". /etc/os-release && echo $UBUNTU_CODENAME"
+      register: ubuntu_codename
+      changed_when: false
+
     - name: Add Docker APT repository
       ansible.builtin.apt_repository:
-        repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu {{ ansible_facts['distribution_release'] }} stable"
+        repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu {{ ubuntu_codename.stdout }} stable"
         state: present
         update_cache: yes
 
@@ -68,7 +110,68 @@
           - docker-compose-plugin
         state: present
 
-    - name: Install Postman Snap
-      ansible.builtin.command: snap install postman
+    - name: Check if Postman is installed
+      ansible.builtin.stat:
+        path: /opt/Postman
+      register: postman_dir
+
+    - name: Download Postman
+      ansible.builtin.get_url:
+        url: https://dl.pstmn.io/download/latest/linux_64
+        dest: /tmp/postman-linux-x64.tar.gz
+      when: not postman_dir.stat.exists
+
+    - name: Extract Postman to /opt
+      ansible.builtin.unarchive:
+        src: /tmp/postman-linux-x64.tar.gz
+        dest: /opt
+        remote_src: yes
+      when: not postman_dir.stat.exists
+
+    - name: Create Postman symlink
+      ansible.builtin.file:
+        src: /opt/Postman/Postman
+        dest: /usr/local/bin/postman
+        state: link
+
+    - name: Create Postman desktop entry
+      ansible.builtin.copy:
+        dest: /usr/share/applications/postman.desktop
+        content: |
+          [Desktop Entry]
+          Type=Application
+          Name=Postman
+          Icon=/opt/Postman/app/resources/app/assets/icon.png
+          Exec=/opt/Postman/Postman
+          Comment=Postman API Client
+          Categories=Development;
+          Terminal=false
+
+    # --- Node.js via NodeSource ---
+    - name: Add NodeSource GPG key and repository
+      ansible.builtin.shell: |
+        curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
       args:
-        creates: /snap/bin/postman
+        creates: /etc/apt/sources.list.d/nodesource.list
+
+    - name: Install Node.js
+      ansible.builtin.apt:
+        name: nodejs
+        state: present
+
+    # --- DBeaver (database GUI) ---
+    - name: Download DBeaver Community
+      ansible.builtin.get_url:
+        url: https://dbeaver.io/files/dbeaver-ce_latest_amd64.deb
+        dest: /tmp/dbeaver-ce_latest_amd64.deb
+
+    - name: Install DBeaver
+      ansible.builtin.apt:
+        deb: /tmp/dbeaver-ce_latest_amd64.deb
+
+    # --- Add current user to docker group ---
+    - name: Add user to docker group
+      ansible.builtin.user:
+        name: "{{ ansible_env.SUDO_USER | default(ansible_user_id) }}"
+        groups: docker
+        append: yes
